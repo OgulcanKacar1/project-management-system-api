@@ -33,6 +33,10 @@ public class Project {
     @ToString.Exclude
     private List<ProjectTeam> takimlar = new ArrayList<>();
 
+    @ManyToOne(optional = false)
+    @JoinColumn(name = "created_by", nullable = false)
+    private User createdBy;
+
     public void addTeam(ProjectTeam team) {
         takimlar.add(team);
         team.setProject(this);

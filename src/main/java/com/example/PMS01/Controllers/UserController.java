@@ -2,6 +2,7 @@ package com.example.PMS01.Controllers;
 
 import com.example.PMS01.dto.UserDTO;
 import com.example.PMS01.entities.User;
+import com.example.PMS01.security.JwtUtil;
 import com.example.PMS01.services.UserService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -16,8 +17,10 @@ import java.util.Map;
 @RequestMapping("/users")
 public class UserController {
     private final UserService userService;
-    public UserController(UserService userService) {
+    private final JwtUtil jwtUtil;
+    public UserController(UserService userService, JwtUtil jwtUtil) {
         this.userService = userService;
+        this.jwtUtil = jwtUtil;
     }
 
     @GetMapping
@@ -63,6 +66,46 @@ public class UserController {
         userService.deleteOneUser(userId);
     }
 
+    @PostMapping("/rehash-passwords")
+    public ResponseEntity<String> rehashPasswords() {
+        userService.rehashAllUserPasswords();
+        return ResponseEntity.ok("Tüm kullanıcı şifreleri hashlenmiştir");
+    }
+
+    @PostMapping("/login")
+    public ResponseEntity<?> login(@RequestBody UserDTO loginRequest) {
+        try {
+            User user = userService.login(loginRequest.getEmail(), loginRequest.getPassword());
+            if (user != null) {
+                // JWT token oluştur
+                String token = jwtUtil.generateToken(user.getEmail());
+
+                // Hassas bilgileri filtreleyerek kullanıcı bilgilerini dön
+                Map<String, Object> userData = new HashMap<>();
+                userData.put("id", user.getId());
+                userData.put("firstName", user.getFirstName());
+                userData.put("lastName", user.getLastName());
+                userData.put("email", user.getEmail());
+                // Şifre gibi hassas bilgileri eklemiyoruz
+
+                Map<String, Object> response = new HashMap<>();
+                response.put("token", token);
+                response.put("user", userData);
+                response.put("message", "Giriş başarılı");
+
+                return ResponseEntity.ok(response);
+            } else {
+                Map<String, String> errorResponse = new HashMap<>();
+                errorResponse.put("message", userService.existsByEmail(loginRequest.getEmail()) ?
+                        "E-posta veya şifre hatalı" : "Kullanıcı bulunamadı");
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errorResponse);
+            }
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new ErrorResponse("Giriş sırasında hata: " + e.getMessage()));
+        }
+    }
+
 
     private static class ErrorResponse {
         private String message;
@@ -79,6 +122,8 @@ public class UserController {
             this.message = message;
         }
     }
+
+
 
 
 }
