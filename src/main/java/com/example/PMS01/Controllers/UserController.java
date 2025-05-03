@@ -1,129 +1,114 @@
 package com.example.PMS01.Controllers;
 
+import com.example.PMS01.dto.RoleDTO;
 import com.example.PMS01.dto.UserDTO;
+import com.example.PMS01.entities.Role;
 import com.example.PMS01.entities.User;
-import com.example.PMS01.security.JwtUtil;
+import com.example.PMS01.entities.UserRole;
+import com.example.PMS01.exceptions.ResourceNotFoundException;
+import com.example.PMS01.exceptions.UserAlreadyExistsException;
+import com.example.PMS01.repositories.UserRepository;
 import com.example.PMS01.services.UserService;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.ErrorResponse;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @RestController
-@RequestMapping("/users")
+@RequestMapping("/api/users")
 public class UserController {
+
     private final UserService userService;
-    private final JwtUtil jwtUtil;
-    public UserController(UserService userService, JwtUtil jwtUtil) {
+    private final UserRepository userRepository;
+
+    public UserController(UserService userService, UserRepository userRepository) {
         this.userService = userService;
-        this.jwtUtil = jwtUtil;
+        this.userRepository = userRepository;
     }
 
     @GetMapping
-    public List<User> getAllUsers() {
-        return userService.getAllUsers();
+    public ResponseEntity<List<UserDTO>> getAllUsers() {
+        List<UserDTO> users = userService.getAllUsers().stream()
+                .map(userService::convertToDTO)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(users);
     }
 
-    @PostMapping("/signup")
-    public ResponseEntity<?> createUser(@RequestBody UserDTO userDTO) {
-        try {
-            if(userService.existsByEmail(userDTO.getEmail())){
-                Map<String, String> errorResponse = new HashMap<>();
-                errorResponse.put("message", "Bu e-posta adresi zaten kayıtlı.");
-                return ResponseEntity
-                        .status(HttpStatus.CONFLICT)
-                        .body(errorResponse);
-            }
-            User user = User.builder()
-                    .firstName(userDTO.getFirstName())
-                    .lastName(userDTO.getLastName())
-                    .email(userDTO.getEmail())
-                    .password(userDTO.getPassword())
-                    .build();
-            User savedUser = userService.saveOneUser(user);
-            return ResponseEntity.ok(savedUser);
-        }catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(new ErrorResponse("Error creating user: " + e.getMessage()));
+
+    @PostMapping
+    public ResponseEntity<?> createUser(@Valid @RequestBody UserDTO newUserDTO) {
+        User newUser = userService.convertToEntity(newUserDTO);
+        User savedUser = userService.saveOneUser(newUser);
+        return ResponseEntity.status(HttpStatus.CREATED).body(savedUser);
+    }
+
+    @GetMapping("/{userId}")
+    public ResponseEntity<?> getOneUser(@PathVariable Long userId) {
+        User user = userService.getOneUserById(userId);
+        return ResponseEntity.ok(userService.convertToDTO(user));
+    }
+
+    @PutMapping("/{userId}")
+    public ResponseEntity<?> updateUser(@PathVariable Long userId, @RequestBody UserDTO updatedUserDTO) {
+        User existingUser = userService.getOneUserById(userId);
+        User updatedUser = userService.convertToEntity(updatedUserDTO);
+
+        if (updatedUser.getPassword() == null || updatedUser.getPassword().isEmpty()) {
+            updatedUser.setPassword(existingUser.getPassword());
         }
 
-    }
-    @GetMapping("/{userId}")
-    public User getOneUser(@PathVariable Long userId) {
-        return userService.getOneUserById(userId);
-    }
-    @PutMapping("/{userId}")
-    public User updateOneUser(@PathVariable Long userId, @RequestBody User newUser) {
-        return userService.updateOneUser(userId, newUser);
+        User savedUser = userService.updateOneUser(userId, updatedUser);
+        return ResponseEntity.ok(userService.convertToDTO(savedUser));
     }
 
-    @DeleteMapping ("/{userId}")
-    public void deleteOneUser(@PathVariable Long userId) {
-        userService.deleteOneUser(userId);
-    }
-
-    @PostMapping("/rehash-passwords")
-    public ResponseEntity<String> rehashPasswords() {
-        userService.rehashAllUserPasswords();
-        return ResponseEntity.ok("Tüm kullanıcı şifreleri hashlenmiştir");
-    }
-
-    @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody UserDTO loginRequest) {
+    @DeleteMapping("/{userId}")
+    @PreAuthorize("hasRole('ADMIN')") // MEMBER yerine ADMIN yetkisi olmalı
+    public ResponseEntity<?> deleteUser(@PathVariable Long userId) {
         try {
-            User user = userService.login(loginRequest.getEmail(), loginRequest.getPassword());
-            if (user != null) {
-                // JWT token oluştur
-                String token = jwtUtil.generateToken(user.getEmail());
-
-                // Hassas bilgileri filtreleyerek kullanıcı bilgilerini dön
-                Map<String, Object> userData = new HashMap<>();
-                userData.put("id", user.getId());
-                userData.put("firstName", user.getFirstName());
-                userData.put("lastName", user.getLastName());
-                userData.put("email", user.getEmail());
-                // Şifre gibi hassas bilgileri eklemiyoruz
-
-                Map<String, Object> response = new HashMap<>();
-                response.put("token", token);
-                response.put("user", userData);
-                response.put("message", "Giriş başarılı");
-
-                return ResponseEntity.ok(response);
-            } else {
-                Map<String, String> errorResponse = new HashMap<>();
-                errorResponse.put("message", userService.existsByEmail(loginRequest.getEmail()) ?
-                        "E-posta veya şifre hatalı" : "Kullanıcı bulunamadı");
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errorResponse);
-            }
+            userService.deleteOneUser(userId);
+            return ResponseEntity.ok("Kullanıcı başarıyla silindi.");
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(new ErrorResponse("Giriş sırasında hata: " + e.getMessage()));
+                    .body("Kullanıcı silinemedi: " + e.getMessage());
         }
     }
 
+//    @PatchMapping("/{userId}/deactivate")
+//    @PreAuthorize("hasRole('ADMIN') or @securityService.isCurrentUser(#userId)")
+//    public ResponseEntity<?> deactivateUser(@PathVariable Long userId) {
+//        User user = userService.deactivateUser(userId);
+//        return ResponseEntity.ok(user);
+//    }
 
-    private static class ErrorResponse {
-        private String message;
 
-        public ErrorResponse(String message) {
-            this.message = message;
-        }
 
-        public String getMessage() {
-            return message;
-        }
-
-        public void setMessage(String message) {
-            this.message = message;
-        }
+    @GetMapping("/{id}/roles")
+    public ResponseEntity<List<RoleDTO>> getUserRoles(@PathVariable Long id) {
+        List<Role> roles = userService.getUserRoles(id);
+        List<RoleDTO> roleDTOs = roles.stream()
+                .map(role -> new RoleDTO(role.getId(), role.getName()))
+                .toList();
+        return ResponseEntity.ok(roleDTOs);
     }
 
 
+    @PostMapping("/{userId}/roles/{roleId}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<?> assignRole(@PathVariable Long userId, @PathVariable Long roleId) {
+        userService.assignRoleToUser(userId, roleId);
+        return ResponseEntity.ok("Rol başarıyla atandı.");
+    }
 
-
+//    @DeleteMapping("/{userId}/roles/{roleId}")
+//    @PreAuthorize("hasRole('ADMIN')")
+//    public ResponseEntity<?> removeRole(@PathVariable Long userId, @PathVariable Long roleId) {
+//        userService.removeRoleFromUser(userId, roleId);
+//        return ResponseEntity.ok("Rol başarıyla kaldırıldı.");
+//    }
 }

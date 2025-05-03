@@ -1,23 +1,21 @@
 package com.example.PMS01.entities;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.springframework.security.core.GrantedAuthority;
 
 import java.util.HashSet;
 import java.util.Set;
 
 @Entity
-@Table(name="roles")
+@Table(name = "team_types")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class Role implements GrantedAuthority {
+public class TeamType {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -26,12 +24,10 @@ public class Role implements GrantedAuthority {
     @Column(nullable = false, unique = true)
     private String name;
 
-    @OneToMany(mappedBy = "role")
-    @JsonIgnore
-    private Set<UserRole> userRoles = new HashSet<>();
+    @Column
+    private String description;
 
-    @Override
-    public String getAuthority() {
-        return "ROLE_" + name;
-    }
+    @OneToMany(mappedBy = "teamType")
+    @Builder.Default
+    private Set<Team> teams = new HashSet<>();
 }

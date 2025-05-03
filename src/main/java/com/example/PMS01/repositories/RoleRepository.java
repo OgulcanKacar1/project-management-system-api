@@ -1,14 +1,12 @@
 package com.example.PMS01.repositories;
 
-import com.example.PMS01.entities.User;
+import com.example.PMS01.entities.Role;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
 
 @Repository
-public interface UserRepository extends JpaRepository<User, Long> {
-    Optional<User> findByEmail(String email);
-
-    boolean existsByEmail(String email);
+public interface RoleRepository extends JpaRepository<Role, Long> {
+    Optional<Role> findByName(String name);
 }

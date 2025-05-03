@@ -13,6 +13,8 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @Builder
 public class UserDTO {
+    private Long id;
+
     @NotBlank(message = "First name is required")
     private String firstName;
 

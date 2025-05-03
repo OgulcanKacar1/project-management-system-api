@@ -1,42 +1,37 @@
 package com.example.PMS01.entities;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name="team_members")
+@Table(name = "user_roles")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class ProjectTeamMember {
+public class UserRole {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "team_id", nullable = false)
-    @ToString.Exclude
-    private Team team;
-
-    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     @ToString.Exclude
+    @JsonIgnore
     private User user;
 
-    @Column(nullable = false)
-    private String role;
-
-    @Column(name = "joined_at", updatable = false)
-    @Builder.Default
-    private LocalDateTime joinedAt = LocalDateTime.now();
-
-    private LocalDateTime leftAt;
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "role_id", nullable = false)
+    @ToString.Exclude
+    @JsonIgnore
+    private Role role;
 
     @Column(nullable = false)
     @Builder.Default
-    private boolean active = true;
+    private LocalDateTime assignedAt = LocalDateTime.now();
+
 }
