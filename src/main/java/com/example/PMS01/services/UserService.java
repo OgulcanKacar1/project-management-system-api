@@ -59,12 +59,8 @@ public class UserService {
 
     public User login(String email, String password) {
         System.out.println("Giris yapiliyor: " + email);
-        User user = userRepository.findByEmail(email);
-
-        if (user == null) {
-            System.out.println("Kullanıcı bulunamadı: " + email);
-            return null;
-        }
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("Kullanıcı bulunamadı: " + email));
 
         boolean passwordMatches = passwordEncoder.matches(password, user.getPassword());
         System.out.println("Şifre eşleşiyor mu: " + passwordMatches);

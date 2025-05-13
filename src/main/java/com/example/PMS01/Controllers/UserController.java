@@ -77,7 +77,6 @@ public class UserController {
         try {
             User user = userService.login(loginRequest.getEmail(), loginRequest.getPassword());
             if (user != null) {
-                // JWT token oluştur
                 String token = jwtUtil.generateToken(user.getEmail());
 
                 // Hassas bilgileri filtreleyerek kullanıcı bilgilerini dön
