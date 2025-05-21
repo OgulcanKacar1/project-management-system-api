@@ -1,20 +1,26 @@
 package com.example.PMS01.services;
 
+import com.example.PMS01.entities.Role;
 import com.example.PMS01.entities.User;
+import com.example.PMS01.repositories.RoleRepository;
 import com.example.PMS01.repositories.UserRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 @Service
 public class UserService {
     private UserRepository userRepository;
     private PasswordEncoder passwordEncoder;
-    public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+    private RoleRepository roleRepository;
+
+    public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder, RoleRepository roleRepository) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.roleRepository = roleRepository;
     }
 
 
@@ -24,6 +30,10 @@ public class UserService {
 
     public User saveOneUser(User newUser) {
         newUser.setPassword(passwordEncoder.encode(newUser.getPassword()));
+        Role memberRole = roleRepository.findByName("MEMBER")
+                .orElseThrow(() -> new RuntimeException("Role not found: MEMBER"));
+
+        newUser.setRoles(Set.of(memberRole));
         return userRepository.save(newUser);
     }
 
@@ -53,26 +63,14 @@ public class UserService {
         userRepository.deleteById(userId);
     }
 
+    public Optional<User> findByEmail(String email) {
+        return userRepository.findByEmail(email);
+    }
+
     public boolean existsByEmail(String email) {
         return userRepository.existsByEmail(email);
     }
 
-    public User login(String email, String password) {
-        System.out.println("Giris yapiliyor: " + email);
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("Kullanıcı bulunamadı: " + email));
-
-        boolean passwordMatches = passwordEncoder.matches(password, user.getPassword());
-        System.out.println("Şifre eşleşiyor mu: " + passwordMatches);
-        System.out.println("Girilen şifre: " + password);
-        System.out.println("DB'deki kodlanmış şifre: " + user.getPassword());
-
-        if (passwordMatches) {
-            return user;
-        }
-
-        return null;
-    }
 
 
     public void rehashAllUserPasswords() {

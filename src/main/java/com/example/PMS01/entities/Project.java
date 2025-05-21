@@ -1,23 +1,28 @@
 package com.example.PMS01.entities;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Entity
-@Table(name="projects")
-@Data
+@JsonIgnoreProperties({"projectUserRoles"})
+@Table(name = "projects")
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@ToString(exclude = "projectUserRoles")
+@EqualsAndHashCode(onlyExplicitlyIncluded = true)
 public class Project {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @EqualsAndHashCode.Include
     private Long id;
 
     @Column(nullable = false, length = 255)
@@ -34,46 +39,23 @@ public class Project {
     @JoinColumn(name = "created_by", nullable = false)
     private User createdBy;
 
-    @OneToMany(mappedBy = "project", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(mappedBy = "project", cascade = CascadeType.ALL, orphanRemoval = true,fetch = FetchType.LAZY)
     @Builder.Default
-    @ToString.Exclude
-    private List<ProjectUserRole> userRoles = new ArrayList<>();
+    private List<ProjectUserRole> projectUserRoles = new ArrayList<>();
 
-    @ManyToMany
-    @JoinTable(
-            name = "project_members",
-            joinColumns = @JoinColumn(name = "project_id"),
-            inverseJoinColumns = @JoinColumn(name = "user_id")
-    )
-    @Builder.Default
-    private Set<User> members = new HashSet<>();
-
-    public void addProjectAdmin(User user) {
-        ProjectUserRole role = ProjectUserRole.builder()
-                .project(this)
-                .user(user)
-                .roleType(ProjectUserRole.ProjectRoleType.PROJECT_ADMIN)
-                .build();
-        userRoles.add(role);
-
-        members.add(user);
-    }
-
-    public void addProjectMember(User user) {
-        ProjectUserRole role = ProjectUserRole.builder()
-                .project(this)
-                .user(user)
-                .roleType(ProjectUserRole.ProjectRoleType.PROJECT_MEMBER)
-                .build();
-        userRoles.add(role);
-
-        members.add(user);
+    public boolean hasRole(User user, ProjectUserRole.ProjectRoleType roleType) {
+        return projectUserRoles.stream()
+                .anyMatch(r -> r.getUser().getId().equals(user.getId()) &&
+                        r.getRoleType() == roleType);
     }
 
     public boolean isProjectAdmin(User user) {
-        return userRoles.stream()
-                .anyMatch(r -> r.getUser().equals(user) &&
-                        r.getRoleType() == ProjectUserRole.ProjectRoleType.PROJECT_ADMIN);
+        return hasRole(user, ProjectUserRole.ProjectRoleType.PROJECT_ADMIN);
     }
 
+    public Set<User> getMembers() {
+        return projectUserRoles.stream()
+                .map(ProjectUserRole::getUser)
+                .collect(Collectors.toSet());
+    }
 }

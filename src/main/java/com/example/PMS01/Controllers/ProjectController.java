@@ -7,20 +7,46 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
-@RequestMapping("/projects")
+@RequestMapping("/api/projects")
 @RequiredArgsConstructor
 public class ProjectController {
     private final ProjectService projectService;
 
-    @PostMapping("/create")
+    @PostMapping
     public ResponseEntity<ProjectResponse> createProject(@Valid @RequestBody ProjectCreateRequest request){
         ProjectResponse response = projectService.createProject(request);
         return new ResponseEntity<>(response, HttpStatus.CREATED);
     }
+
+    @GetMapping("/my-projects")
+    public ResponseEntity<List<ProjectResponse>> getMyProjects() {
+        List<ProjectResponse> projects = projectService.getMyProjects();
+        projects.forEach(p -> System.out.println("members: " + p.getMembers()));
+        return ResponseEntity.ok(projects);
+    }
+
+    @GetMapping("/{projectId}")
+    public ResponseEntity<ProjectResponse> getProjectById(@PathVariable Long projectId) {
+        ProjectResponse project = projectService.getProjectById(projectId);
+        return ResponseEntity.ok(project);
+    }
+
+    @DeleteMapping("/{projectId}")
+    public ResponseEntity<Void> deleteProject(@PathVariable Long projectId) {
+        projectService.deleteProject(projectId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping("/{projectId}")
+    public ResponseEntity<ProjectResponse> updateProject(@PathVariable Long projectId,
+                                                         @Valid @RequestBody ProjectCreateRequest request) {
+        ProjectResponse updated = projectService.updateProject(projectId, request);
+        return ResponseEntity.ok(updated);
+    }
+
 }
