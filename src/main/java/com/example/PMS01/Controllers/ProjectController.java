@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/projects")
@@ -24,9 +25,8 @@ public class ProjectController {
     }
 
     @GetMapping("/my-projects")
-    public ResponseEntity<List<ProjectResponse>> getMyProjects() {
-        List<ProjectResponse> projects = projectService.getMyProjects();
-        projects.forEach(p -> System.out.println("members: " + p.getMembers()));
+    public ResponseEntity<Map<String, List<ProjectResponse>>> getMyProjects() {
+        Map<String, List<ProjectResponse>> projects = projectService.getMyProjects();
         return ResponseEntity.ok(projects);
     }
 

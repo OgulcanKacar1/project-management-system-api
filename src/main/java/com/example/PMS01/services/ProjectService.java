@@ -8,6 +8,7 @@ import com.example.PMS01.entities.Project;
 import com.example.PMS01.entities.ProjectUserRole;
 import com.example.PMS01.entities.User;
 import com.example.PMS01.repositories.ProjectRepository;
+import com.example.PMS01.repositories.ProjectUserRoleRepository;
 import com.example.PMS01.repositories.UserRepository;
 import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -16,7 +17,10 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -24,6 +28,8 @@ import java.util.stream.Collectors;
 public class ProjectService {
     private final ProjectRepository projectRepository;
     private final UserRepository userRepository;
+    private final UserService userService;
+    private final ProjectUserRoleRepository projectUserRoleRepository;
 
     public ProjectResponse createProject(ProjectCreateRequest request){
         String username = getCurrentUserEmail();
@@ -60,16 +66,34 @@ public class ProjectService {
         return convertToResponse(projectRepository.save(savedProject));
     }
 
-    @Transactional(readOnly=true)
-    public List<ProjectResponse> getMyProjects() {
-        String username = ((UserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal()).getUsername();
+    public Map<String, List<ProjectResponse>> getMyProjects() {
+        String currentUserEmail = userService.getCurrentUserEmail();
+        User currentUser = userRepository.findByEmail(currentUserEmail)
+                .orElseThrow(() -> new RuntimeException("Kullanıcı bulunamadı"));
 
-        List<Project> projects = projectRepository.findAllByCreatedByEmailWithRoles(username);
-
-
-        return projects.stream()
+        // Kullanıcının oluşturduğu projeler
+        List<Project> createdProjects = projectRepository.findByCreatedByEmail(currentUserEmail);
+        List<ProjectResponse> createdProjectsResponse = createdProjects.stream()
                 .map(this::convertToResponse)
-                .toList();
+                .collect(Collectors.toList());
+
+        // Kullanıcının üye olduğu projeler
+        List<ProjectUserRole> userRoles = projectUserRoleRepository.findByUser(currentUser);
+        List<Project> memberProjects = userRoles.stream()
+                .map(ProjectUserRole::getProject)
+                .filter(p -> !p.getCreatedBy().getEmail().equals(currentUserEmail))
+                .distinct() // Aynı projeyi birden fazla rolle çekmeyi önle
+                .collect(Collectors.toList());
+
+        List<ProjectResponse> memberProjectsResponse = memberProjects.stream()
+                .map(this::convertToResponse)
+                .collect(Collectors.toList());
+
+        Map<String, List<ProjectResponse>> result = new HashMap<>();
+        result.put("ownedProjects", createdProjectsResponse);
+        result.put("memberProjects", memberProjectsResponse);
+
+        return result;
     }
 
     public ProjectResponse getProjectById(Long projectId) {

@@ -16,7 +16,7 @@ public class LoginRequest {
     @Email(message = "Email is not valid")
     private String email;
 
-    @NotBlank(message = "Password is required!")
+    @NotBlank(message = "Password is required")
     private String password;
 }
 

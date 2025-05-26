@@ -13,4 +13,5 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
 
     @Query("SELECT DISTINCT p FROM Project p LEFT JOIN FETCH p.projectUserRoles pur LEFT JOIN FETCH pur.user WHERE p.createdBy.email = :email")
     List<Project> findAllByCreatedByEmailWithRoles(@Param("email") String email);
+    List<Project> findAllByCreatedByEmail(String email);
 }
