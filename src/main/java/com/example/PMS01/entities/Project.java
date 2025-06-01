@@ -39,9 +39,14 @@ public class Project {
     @JoinColumn(name = "created_by", nullable = false)
     private User createdBy;
 
-    @OneToMany(mappedBy = "project", cascade = CascadeType.ALL, orphanRemoval = true,fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "project", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @Builder.Default
     private List<ProjectUserRole> projectUserRoles = new ArrayList<>();
+
+    @OneToMany(mappedBy = "project", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @Builder.Default
+    private List<ProjectInvitation> projectInvitations = new ArrayList<>();
+
 
     public boolean hasRole(User user, ProjectUserRole.ProjectRoleType roleType) {
         return projectUserRoles.stream()
@@ -57,5 +62,17 @@ public class Project {
         return projectUserRoles.stream()
                 .map(ProjectUserRole::getUser)
                 .collect(Collectors.toSet());
+    }
+
+    // Projeye rol ekleme helper metodu
+    public void addUserRole(ProjectUserRole role) {
+        projectUserRoles.add(role);
+        role.setProject(this);
+    }
+
+    // Projeden rol silme helper metodu
+    public void removeUserRole(ProjectUserRole role) {
+        projectUserRoles.remove(role);
+        role.setProject(null);
     }
 }

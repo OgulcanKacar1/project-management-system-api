@@ -48,4 +48,24 @@ public class ProjectInvitationController {
             return ResponseEntity.badRequest().body(error);
         }
     }
+
+    @GetMapping("/accepted")
+    public ResponseEntity<List<ProjectInvitationResponse>> getAcceptedInvitations() {
+        return ResponseEntity.ok(invitationService.getAcceptedInvitationsForCurrentUser());
+    }
+
+    @GetMapping("/rejected")
+    public ResponseEntity<List<ProjectInvitationResponse>> getRejectedInvitations() {
+        return ResponseEntity.ok(invitationService.getRejectedInvitationsForCurrentUser());
+    }
+
+    @GetMapping("/all")
+    public ResponseEntity<List<ProjectInvitationResponse>> getAllInvitations() {
+        return ResponseEntity.ok(invitationService.getAllInvitationsForCurrentUser());
+    }
+
+    @GetMapping("/sent")
+    public ResponseEntity<List<ProjectInvitationResponse>> getSentInvitations() {
+        return ResponseEntity.ok(invitationService.getSentInvitations());
+    }
 }

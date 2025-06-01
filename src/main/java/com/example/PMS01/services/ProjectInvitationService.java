@@ -68,12 +68,11 @@ public class ProjectInvitationService {
             throw new RuntimeException("Bu kullanıcı zaten projenin bir üyesi");
         }
 
-        // Bekleyen davet var mı kontrol et
-        if (invitationRepository.existsByProjectAndInvitedUserAndStatusNot(
-                project, invitedUser, ProjectInvitation.InvitationStatus.REJECTED)) {
+        // Sadece bekleyen daveti kontrol et
+        if (invitationRepository.existsByProjectAndInvitedUserAndStatus(
+                project, invitedUser, ProjectInvitation.InvitationStatus.PENDING)) {
             throw new RuntimeException("Bu kullanıcı için zaten bekleyen bir davet bulunuyor");
         }
-
         // Yeni davet oluştur
         ProjectInvitation invitation = ProjectInvitation.builder()
                 .project(project)
@@ -165,5 +164,39 @@ public class ProjectInvitationService {
                 .respondedAt(invitation.getRespondedAt())
                 .role(invitation.getRole())
                 .build();
+    }
+
+    public List<ProjectInvitationResponse> getAcceptedInvitationsForCurrentUser() {
+        String currentUserEmail = userService.getCurrentUserEmail();
+        return invitationRepository.findByInvitedUser_EmailAndStatus(
+                        currentUserEmail, ProjectInvitation.InvitationStatus.ACCEPTED)
+                .stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
+    public List<ProjectInvitationResponse> getRejectedInvitationsForCurrentUser() {
+        String currentUserEmail = userService.getCurrentUserEmail();
+        return invitationRepository.findByInvitedUser_EmailAndStatus(
+                        currentUserEmail, ProjectInvitation.InvitationStatus.REJECTED)
+                .stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
+    public List<ProjectInvitationResponse> getAllInvitationsForCurrentUser() {
+        String currentUserEmail = userService.getCurrentUserEmail();
+        return invitationRepository.findByInvitedUser_Email(currentUserEmail)
+                .stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
+    public List<ProjectInvitationResponse> getSentInvitations() {
+        String currentUserEmail = userService.getCurrentUserEmail();
+        return invitationRepository.findByInvitedBy_Email(currentUserEmail)
+                .stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
     }
 }
