@@ -5,6 +5,8 @@ import com.example.PMS01.entities.Project;
 import com.example.PMS01.entities.ProjectUserRole;
 import com.example.PMS01.entities.Task;
 import com.example.PMS01.entities.User;
+import com.example.PMS01.exceptions.ResourceNotFoundException;
+import com.example.PMS01.exceptions.UnauthorizedException;
 import com.example.PMS01.repositories.ProjectRepository;
 import com.example.PMS01.repositories.ProjectUserRoleRepository;
 import com.example.PMS01.repositories.TaskRepository;
@@ -193,6 +195,73 @@ public class TaskService {
         }
 
         return mapToDTO(task);
+    }
+
+    @Transactional
+    public TaskDTO updateTask(Long taskId, TaskDTO taskDTO) {
+        User currentUser = getCurrentUser();
+        Task task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new ResourceNotFoundException("Görev bulunamadı"));
+
+        Project project = task.getProject();
+
+        // Yetki kontrolü - sadece görevin atandığı kişi veya proje yöneticisi güncelleyebilir
+        boolean isProjectAdmin = project.isProjectAdmin(currentUser);
+        boolean isCreator = task.getCreatedBy().getId().equals(currentUser.getId());
+
+        if (!isProjectAdmin && !isCreator) {
+            throw new UnauthorizedException("Bu görevi güncelleme yetkiniz bulunmamaktadır");
+        }
+
+        // Temel bilgileri güncelle
+        task.setTitle(taskDTO.getTitle());
+        task.setDescription(taskDTO.getDescription());
+        task.setDeadline(taskDTO.getDeadline());
+        task.setLastModifiedBy(currentUser.getEmail());
+
+        // Atanan kullanıcıları güncelle
+        if (taskDTO.getAssignedUserIds() != null) {
+            Set<User> assignedUsers = new HashSet<>();
+            for (Long userId : taskDTO.getAssignedUserIds()) {
+                User user = userRepository.findById(userId)
+                        .orElseThrow(() -> new ResourceNotFoundException("Atanacak kullanıcı bulunamadı: " + userId));
+
+                // Kullanıcının projede üye olup olmadığını kontrol et
+                boolean isMember = projectUserRoleRepository.existsByProjectAndUser(project, user);
+                if (!isMember) {
+                    throw new RuntimeException("Kullanıcı " + user.getEmail() + " bu projenin üyesi değil");
+                }
+                assignedUsers.add(user);
+            }
+            task.setAssignedUsers(assignedUsers);
+        }
+
+        Task updatedTask = taskRepository.save(task);
+        activityLogService.logTaskActivity(
+                updatedTask,
+                "TASK_UPDATED",
+                "Görev güncellendi: " + task.getTitle(),
+                currentUser.getFirstName() + " " + currentUser.getLastName()
+        );
+
+        return mapToDTO(updatedTask);
+    }
+
+    @Transactional
+    public void deleteTask(Long taskId) {
+        User currentUser = getCurrentUser();
+        Task task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new ResourceNotFoundException("Görev bulunamadı"));
+
+        Project project = task.getProject();
+        if (!project.isProjectAdmin(currentUser) &&
+                !task.getCreatedBy().equals(currentUser)){
+            throw new UnauthorizedException("Bu görevi silme yetkiniz yok");
+        }
+
+        taskRepository.delete(task);
+
+        activityLogService.logTaskActivity(task, "TASK_DELETED", "Görev silindi: " + task.getTitle(), currentUser.getFirstName() + " " + currentUser.getLastName());
     }
 
     // DTO'ya dönüştürme yardımcı metodu

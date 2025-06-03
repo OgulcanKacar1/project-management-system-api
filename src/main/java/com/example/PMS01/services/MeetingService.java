@@ -184,4 +184,18 @@ public class MeetingService {
                 .participantIds(participantIds)
                 .build();
     }
+
+    public MeetingDTO getMeetingDetail(Long meetingId) {
+        User currentUser = getCurrentUser();
+        Meeting meeting = meetingRepository.findById(meetingId)
+                .orElseThrow(() -> new ResourceNotFoundException("Toplantı bulunamadı"));
+
+        // Kullanıcı ya toplantının katılımcısı olmalı ya da proje yöneticisi olmalı
+        if (!meeting.getParticipants().contains(currentUser) &&
+                !meeting.getProject().isProjectAdmin(currentUser)) {
+            throw new UnauthorizedException("Bu toplantıya erişim izniniz yok");
+        }
+
+        return convertToDTO(meeting);
+    }
 }

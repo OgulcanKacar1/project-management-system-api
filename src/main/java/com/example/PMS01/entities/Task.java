@@ -90,6 +90,10 @@ public class Task {
         updatedAt = LocalDateTime.now();
     }
 
+    // Task.java sınıfına ekleyin
+    @OneToMany(mappedBy = "task", cascade = CascadeType.ALL, orphanRemoval = true)
+    private Set<TaskChatMessage> chatMessages = new HashSet<>();
+
     public boolean isStatusChanged() {
         return previousStatus != null && !previousStatus.equals(status);
     }

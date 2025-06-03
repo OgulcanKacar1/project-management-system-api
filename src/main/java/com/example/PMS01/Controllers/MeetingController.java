@@ -54,4 +54,10 @@ public class MeetingController {
         meetingService.deleteMeeting(meetingId);
         return ResponseEntity.noContent().build();
     }
+
+    @GetMapping("/{meetingId}")
+    public ResponseEntity<MeetingDTO> getMeetingDetail(@PathVariable Long meetingId) {
+        MeetingDTO meeting = meetingService.getMeetingDetail(meetingId);
+        return ResponseEntity.ok(meeting);
+    }
 }

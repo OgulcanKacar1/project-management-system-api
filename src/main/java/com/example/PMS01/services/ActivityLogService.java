@@ -9,6 +9,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+
 @Service
 @RequiredArgsConstructor
 public class ActivityLogService {
@@ -42,5 +44,19 @@ public class ActivityLogService {
                 .build();
 
         activityLogRepository.save(log);
+    }
+
+    public void logTaskActivity(Task task, String activityType, String description, String performedBy) {
+        ActivityLog activityLog = ActivityLog.builder()
+                .action(activityType)
+                .details(description)
+                .entityType("TASK")
+                .entityId(task.getId())
+                .project(task.getProject())
+                .performedBy(performedBy)
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        activityLogRepository.save(activityLog);
     }
 }
