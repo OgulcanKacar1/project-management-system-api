@@ -8,6 +8,7 @@ import com.example.PMS01.entities.Project;
 import com.example.PMS01.entities.ProjectUserRole;
 import com.example.PMS01.entities.User;
 import com.example.PMS01.repositories.ProjectRepository;
+import com.example.PMS01.repositories.ProjectUserRoleRepository;
 import com.example.PMS01.repositories.UserRepository;
 import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -16,7 +17,10 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -24,6 +28,8 @@ import java.util.stream.Collectors;
 public class ProjectService {
     private final ProjectRepository projectRepository;
     private final UserRepository userRepository;
+    private final UserService userService;
+    private final ProjectUserRoleRepository projectUserRoleRepository;
 
     public ProjectResponse createProject(ProjectCreateRequest request){
         String username = getCurrentUserEmail();
@@ -60,16 +66,34 @@ public class ProjectService {
         return convertToResponse(projectRepository.save(savedProject));
     }
 
-    @Transactional(readOnly=true)
-    public List<ProjectResponse> getMyProjects() {
-        String username = ((UserDetails) SecurityContextHolder.getContext().getAuthentication().getPrincipal()).getUsername();
+    public Map<String, List<ProjectResponse>> getMyProjects() {
+        String currentUserEmail = userService.getCurrentUserEmail();
+        User currentUser = userRepository.findByEmail(currentUserEmail)
+                .orElseThrow(() -> new RuntimeException("Kullanıcı bulunamadı"));
 
-        List<Project> projects = projectRepository.findAllByCreatedByEmailWithRoles(username);
-
-
-        return projects.stream()
+        // Kullanıcının oluşturduğu projeler
+        List<Project> createdProjects = projectRepository.findByCreatedByEmail(currentUserEmail);
+        List<ProjectResponse> createdProjectsResponse = createdProjects.stream()
                 .map(this::convertToResponse)
-                .toList();
+                .collect(Collectors.toList());
+
+        // Kullanıcının üye olduğu projeler
+        List<ProjectUserRole> userRoles = projectUserRoleRepository.findByUser(currentUser);
+        List<Project> memberProjects = userRoles.stream()
+                .map(ProjectUserRole::getProject)
+                .filter(p -> !p.getCreatedBy().getEmail().equals(currentUserEmail))
+                .distinct() // Aynı projeyi birden fazla rolle çekmeyi önle
+                .collect(Collectors.toList());
+
+        List<ProjectResponse> memberProjectsResponse = memberProjects.stream()
+                .map(this::convertToResponse)
+                .collect(Collectors.toList());
+
+        Map<String, List<ProjectResponse>> result = new HashMap<>();
+        result.put("ownedProjects", createdProjectsResponse);
+        result.put("memberProjects", memberProjectsResponse);
+
+        return result;
     }
 
     public ProjectResponse getProjectById(Long projectId) {
@@ -147,7 +171,7 @@ public class ProjectService {
     private ProjectResponse convertToResponse(Project project) {
         List<MemberDTO> memberDTOs = project.getProjectUserRoles().stream()
                 .collect(Collectors.groupingBy(
-                        role -> role.getUser().getEmail(), // Email’e göre grupla
+                        role -> role.getUser(),// Email’e göre grupla
                         Collectors.mapping(
                                 role -> role.getRoleType().name(), // Rol ismini al
                                 Collectors.toList() // Liste halinde topla
@@ -156,12 +180,12 @@ public class ProjectService {
                 .entrySet()
                 .stream()
                 .map(entry -> MemberDTO.builder()
-                        .email(entry.getKey())
+                        .id(entry.getKey().getId())
+                        .email(entry.getKey().getEmail())
                         .roles(entry.getValue())
                         .build())
                 .toList();
 
-//        System.out.println("memberDTOs: " + memberDTOs);
 
         return ProjectResponse.builder()
                 .id(project.getId())
@@ -171,6 +195,108 @@ public class ProjectService {
                 .createdBy(project.getCreatedBy().getEmail())
                 .members(memberDTOs)
                 .build();
+    }
+
+    public void leaveProject(Long projectId) {
+        String currentUserEmail = getCurrentUserEmail();
+        User currentUser = userRepository.findByEmail(currentUserEmail)
+                .orElseThrow(() -> new RuntimeException("Kullanıcı bulunamadı"));
+
+        Project project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new RuntimeException("Proje bulunamadı"));
+
+        if (project.getCreatedBy().getEmail().equals(currentUserEmail)) {
+            throw new RuntimeException("Proje sahibi doğrudan projeden çıkamaz. Önce proje sahipliğini başka bir üyeye transfer etmelisiniz.");
+        }
+
+        List<ProjectUserRole> roles = projectUserRoleRepository.findByUserAndProject(currentUser, project);
+        if (roles.isEmpty()) {
+            throw new RuntimeException("Bu projede zaten üye değilsiniz");
+        }
+
+        projectUserRoleRepository.deleteAll(roles);
+    }
+
+    public void removeMemberFromProject(Long projectId, String memberEmail) {
+        String currentUserEmail = getCurrentUserEmail();
+
+        Project project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new RuntimeException("Proje bulunamadı"));
+
+        boolean isAdmin = projectUserRoleRepository.existsByProjectAndUserEmailAndRoleType(
+                project, currentUserEmail, ProjectUserRole.ProjectRoleType.PROJECT_ADMIN);
+
+        if (!project.getCreatedBy().getEmail().equals(currentUserEmail) && !isAdmin) {
+            throw new RuntimeException("Bu işlemi yapma yetkiniz yok");
+        }
+
+        if (project.getCreatedBy().getEmail().equals(memberEmail)) {
+            throw new RuntimeException("Proje sahibi projeden çıkarılamaz");
+        }
+
+        User memberToRemove = userRepository.findByEmail(memberEmail)
+                .orElseThrow(() -> new RuntimeException("Çıkarılacak kullanıcı bulunamadı"));
+
+        List<ProjectUserRole> roles = projectUserRoleRepository.findByUserAndProject(memberToRemove, project);
+        if (roles.isEmpty()) {
+            throw new RuntimeException("Bu kullanıcı zaten projede üye değil");
+        }
+
+        projectUserRoleRepository.deleteAll(roles);
+    }
+
+    @Transactional
+    public void transferProjectAdmin(Long projectId, String newAdminEmail) {
+        String currentUserEmail = getCurrentUserEmail();
+        User currentUser = userRepository.findByEmail(currentUserEmail)
+                .orElseThrow(() -> new RuntimeException("Oturum açmış kullanıcı bulunamadı"));
+
+        // Yeni admin kullanıcısını bul
+        User newAdmin = userRepository.findByEmail(newAdminEmail)
+                .orElseThrow(() -> new RuntimeException("Yeni admin olarak atanacak kullanıcı bulunamadı"));
+
+        // Projeyi kontrol et
+        Project project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new RuntimeException("Proje bulunamadı"));
+
+        // Mevcut kullanıcının proje admini olup olmadığını kontrol et
+        boolean isCurrentUserAdmin = project.getCreatedBy().getEmail().equals(currentUserEmail) ||
+                projectUserRoleRepository.existsByProjectAndUserAndRoleType(
+                        project, currentUser, ProjectUserRole.ProjectRoleType.PROJECT_ADMIN);
+
+        if (!isCurrentUserAdmin) {
+            throw new RuntimeException("Bu işlem için admin yetkisine sahip değilsiniz");
+        }
+
+        // Yeni admin kullanıcısının projede olup olmadığını kontrol et
+        if (!projectUserRoleRepository.existsByProjectAndUser(project, newAdmin)) {
+            throw new RuntimeException("Transfer edilecek kullanıcı bu projenin üyesi değil");
+        }
+
+        // Proje sahipliğini transfer et
+        project.setCreatedBy(newAdmin);
+
+        // Yeni adminlik rolünü eklemeden önce, kullanıcının mevcut rollerini kontrol et
+        boolean hasAdminRole = projectUserRoleRepository.existsByProjectAndUserAndRoleType(
+                project, newAdmin, ProjectUserRole.ProjectRoleType.PROJECT_ADMIN);
+
+        if (!hasAdminRole) {
+            ProjectUserRole adminRole = ProjectUserRole.builder()
+                    .project(project)
+                    .user(newAdmin)
+                    .roleType(ProjectUserRole.ProjectRoleType.PROJECT_ADMIN)
+                    .build();
+
+            projectUserRoleRepository.save(adminRole);
+        }
+
+        // Mevcut kullanıcıdan admin rolünü kaldır
+        List<ProjectUserRole> currentUserAdminRoles = projectUserRoleRepository.findByProjectAndUserAndRoleType(
+                project, currentUser, ProjectUserRole.ProjectRoleType.PROJECT_ADMIN);
+        projectUserRoleRepository.deleteAll(currentUserAdminRoles);
+
+        // Güncellenen projeyi kaydet
+        projectRepository.save(project);
     }
 
 
